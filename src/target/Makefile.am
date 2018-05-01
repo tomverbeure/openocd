@@ -39,6 +39,7 @@ TARGET_CORE_SRC = \
 	%D%/target.c \
 	%D%/target_request.c \
 	%D%/testee.c \
+	%D%/jtag_gpio.c \
 	%D%/smp.c
 
 ARMV4_5_SRC = \
