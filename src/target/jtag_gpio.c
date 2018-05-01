@@ -23,18 +23,72 @@
 
 #include "target.h"
 #include "target_type.h"
-#include "hello.h"
+
+static COMMAND_HELPER(handle_settings_args, const char **sep, const char **name)
+{
+	if (CMD_ARGC > 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	if (1 == CMD_ARGC) {
+		*sep = " ";
+		*name = CMD_ARGV[0];
+	} else
+		*sep = *name = "";
+
+	return ERROR_OK;
+}
+
+COMMAND_HANDLER(handle_settings_command)
+{
+	const char *sep, *name;
+	int retval = CALL_COMMAND_HANDLER(handle_settings_args, &sep, &name);
+	if (ERROR_OK == retval)
+		command_print(CMD_CTX, "Greetings%s%s!", sep, name);
+	return retval;
+}
+
+COMMAND_HANDLER(handle_set_pin_command)
+{
+	const char *sep, *name;
+	int retval = CALL_COMMAND_HANDLER(handle_settings_args, &sep, &name);
+	if (ERROR_OK == retval)
+		command_print(CMD_CTX, "Greetings%s%s!", sep, name);
+	return retval;
+}
+
+COMMAND_HANDLER(handle_get_pin_command)
+{
+	const char *sep, *name;
+	int retval = CALL_COMMAND_HANDLER(handle_settings_args, &sep, &name);
+	if (ERROR_OK == retval)
+		command_print(CMD_CTX, "Greetings%s%s!", sep, name);
+	return retval;
+}
 
 static const struct command_registration jtag_gpio_command_handlers[] = {
 	{
-		.name = "jtag_gpio",
+		.name = "settings",
+        .handler = handle_settings_command,
 		.mode = COMMAND_ANY,
-		.help = "jtag_gpio target commands",
-
-		.chain = hello_command_handlers,
+		.help = "set GPIO pins as input or output",
+        .usage = "<enable_mask>"
+	},
+	{
+		.name = "set_pin",
+        .handler = handle_set_pin_command,
+		.mode = COMMAND_ANY,
+		.help = "Set GPIO output value of pin nr",
+        .usage = "<pin_nr> <value>"
+	},
+	{
+		.name = "get_pin",
+        .handler = handle_get_pin_command,
+		.mode = COMMAND_ANY,
+		.help = "Print GPIO input values of pin nr",
+        .usage = "<pin_nr>"
 	},
 	COMMAND_REGISTRATION_DONE
 };
+
 
 static int jtag_gpio_init(struct command_context *cmd_ctx, struct target *target)
 {
