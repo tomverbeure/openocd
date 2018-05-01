@@ -48,20 +48,35 @@ COMMAND_HANDLER(handle_settings_command)
 
 COMMAND_HANDLER(handle_set_pin_command)
 {
-	const char *sep, *name;
-	int retval = CALL_COMMAND_HANDLER(handle_settings_args, &sep, &name);
-	if (ERROR_OK == retval)
-		command_print(CMD_CTX, "Greetings%s%s!", sep, name);
-	return retval;
+	if (CMD_ARGC != 2){
+		LOG_WARNING("Need pin_nr and value");
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+
+	uint8_t pin_nr, value;
+
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[0], pin_nr);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[1], value);
+
+	command_print(CMD_CTX, "pin %d = %d", pin_nr, value);
+
+	return ERROR_OK;
 }
 
 COMMAND_HANDLER(handle_get_pin_command)
 {
-	const char *sep, *name;
-	int retval = CALL_COMMAND_HANDLER(handle_settings_args, &sep, &name);
-	if (ERROR_OK == retval)
-		command_print(CMD_CTX, "Greetings%s%s!", sep, name);
-	return retval;
+	if (CMD_ARGC != 1){
+		LOG_WARNING("Need pin_nr");
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+
+	uint8_t pin_nr;
+
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[0], pin_nr);
+
+	command_print(CMD_CTX, "pin %d", pin_nr);
+
+	return ERROR_OK;
 }
 
 static const struct command_registration jtag_gpio_command_handlers[] = {
