@@ -34,6 +34,7 @@ struct jtag_gpio_info {
 };
 
 static int jtag_gpio_set_config(struct jtag_gpio_info *jgi);
+static int jtag_gpio_xfer_values(struct jtag_gpio_info *jgi);
 
 COMMAND_HANDLER(handle_settings_command)
 {
@@ -62,33 +63,46 @@ COMMAND_HANDLER(handle_settings_command)
 
 COMMAND_HANDLER(handle_set_pin_command)
 {
+    int retval;
+
 	if (CMD_ARGC != 2){
 		LOG_WARNING("Need pin_nr and value");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
 	uint8_t pin_nr, value;
-
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[0], pin_nr);
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[1], value);
 
 	command_print(CMD_CTX, "pin %d = %d", pin_nr, value);
 
-	return ERROR_OK;
+    struct jtag_gpio_info *jgi = CMD_CTX->current_target->arch_info;
+    jgi->pin_output_val[pin_nr] = value;
+
+    retval = jtag_gpio_xfer_values(jgi);
+
+	return retval;
 }
 
 COMMAND_HANDLER(handle_get_pin_command)
 {
+    int retval;
+
 	if (CMD_ARGC != 1){
 		LOG_WARNING("Need pin_nr");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
 	uint8_t pin_nr;
-
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[0], pin_nr);
 
-	command_print(CMD_CTX, "pin %d", pin_nr);
+    struct jtag_gpio_info *jgi = CMD_CTX->current_target->arch_info;
+    retval = jtag_gpio_xfer_values(jgi);
+
+    if (retval != ERROR_OK)
+        return retval;
+
+	command_print(CMD_CTX, "pin %d = %d", pin_nr, jgi->pin_input_val[pin_nr]);
 
 	return ERROR_OK;
 }
@@ -157,7 +171,7 @@ static int jtag_gpio_set_config(struct jtag_gpio_info *jgi)
         gpio_config |= (jgi->pin_dir_output[i] << i);
     }
 
-    fields[0].num_bits = 3;
+    fields[0].num_bits = 3;         // FIXME: make programmable
     fields[0].out_value = &gpio_config;
     fields[0].in_value = &gpio_config_prev;
 
@@ -166,6 +180,43 @@ static int jtag_gpio_set_config(struct jtag_gpio_info *jgi)
 	retval = jtag_execute_queue();
 	if (retval != ERROR_OK)
 		return retval;
+
+    return retval;
+}
+
+static int jtag_gpio_xfer_values(struct jtag_gpio_info *jgi)
+{
+    int retval;
+    struct scan_field fields[1];
+
+    uint8_t ir_code = 4;            // GPIO_DATA
+
+    fields[0].num_bits = 4;
+    fields[0].out_value = &ir_code;
+    fields[0].in_value = NULL;
+
+    jtag_add_ir_scan(jgi->tap, fields, TAP_IDLE);
+
+    uint8_t gpio_input_value = 0;
+    uint8_t gpio_output_value = 0;
+
+    for(int i=0;i<3;++i){
+        gpio_output_value |= (jgi->pin_output_val[i] << i);
+    }
+
+    fields[0].num_bits = 3;         // FIXME: make programmable
+    fields[0].out_value = &gpio_output_value;
+    fields[0].in_value = &gpio_input_value;
+
+    jtag_add_dr_scan(jgi->tap, 1, fields, TAP_IDLE);
+
+	retval = jtag_execute_queue();
+	if (retval != ERROR_OK)
+		return retval;
+
+    for(int i=0;i<3;++i){
+        jgi->pin_input_val[i] = (gpio_input_value >> i) & 1;
+    }
 
     return retval;
 }
