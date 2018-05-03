@@ -25,6 +25,11 @@
 #include "target_type.h"
 #include "jtag/jtag.h"
 
+#define NR_GPIOS            3
+
+#define IR_SCAN_N           2
+#define IR_EXTEST           3
+
 struct jtag_gpio_info {
     struct jtag_tap * tap;
 
@@ -34,6 +39,7 @@ struct jtag_gpio_info {
 };
 
 static int jtag_gpio_set_config(struct jtag_gpio_info *jgi);
+static int jtag_gpio_get_config(struct jtag_gpio_info *jgi);
 static int jtag_gpio_xfer_values(struct jtag_gpio_info *jgi);
 
 COMMAND_HANDLER(handle_settings_command)
@@ -53,6 +59,10 @@ COMMAND_HANDLER(handle_settings_command)
 	command_print(CMD_CTX, "pin dir %d = %d (%s)", pin_nr, value, value ? "output" : "input");
 
     struct jtag_gpio_info *jgi = CMD_CTX->current_target->arch_info;
+
+    retval = jtag_gpio_get_config(jgi);
+    if (retval != ERROR_OK)
+        return retval;
 
     jgi->pin_dir_output[pin_nr] = value;
         
@@ -151,12 +161,11 @@ static int jtag_gpio_target_create(struct target *target, Jim_Interp *interp)
     return ERROR_OK;
 }
 
-static int jtag_gpio_set_config(struct jtag_gpio_info *jgi)
+static void jtag_gpio_select_data_chain_nr(struct jtag_gpio_info *jgi, uint8_t chain_nr)
 {
-    int retval;
     struct scan_field fields[1];
 
-    uint8_t ir_code = 5;            // GPIO_CONFIG
+    uint8_t ir_code = IR_SCAN_N;
 
     fields[0].num_bits = 4;
     fields[0].out_value = &ir_code;
@@ -164,16 +173,66 @@ static int jtag_gpio_set_config(struct jtag_gpio_info *jgi)
 
     jtag_add_ir_scan(jgi->tap, fields, TAP_IDLE);
 
+    fields[0].num_bits = 1;
+    fields[0].out_value = &chain_nr;
+    fields[0].in_value = NULL;
+
+    jtag_add_dr_scan(jgi->tap, 1, fields, TAP_IDLE);
+
+    ir_code = IR_EXTEST;
+
+    fields[0].num_bits = 4;
+    fields[0].out_value = &ir_code;
+    fields[0].in_value = NULL;
+
+    jtag_add_ir_scan(jgi->tap, fields, TAP_IDLE);
+}
+
+static int jtag_gpio_get_config(struct jtag_gpio_info *jgi)
+{
+    int retval;
+
+    // Select CONFIG chain
+    jtag_gpio_select_data_chain_nr(jgi, 0);
+
     uint8_t gpio_config = 0;
-    uint8_t gpio_config_prev = 0;
+    struct scan_field fields[1];
+
+    fields[0].num_bits = NR_GPIOS+1;
+    fields[0].out_value = NULL;
+    fields[0].in_value = &gpio_config;
+
+    jtag_add_dr_scan(jgi->tap, 1, fields, TAP_IDLE);
+
+	retval = jtag_execute_queue();
+	if (retval != ERROR_OK)
+		return retval;
+
+    for(int i=0;i<NR_GPIOS;++i){
+        jgi->pin_dir_output[i] = (gpio_config >> i) & 1;
+    }
+
+    return retval;
+}
+
+static int jtag_gpio_set_config(struct jtag_gpio_info *jgi)
+{
+    int retval;
+
+    // Select CONFIG chain
+    jtag_gpio_select_data_chain_nr(jgi, 0);
+
+    struct scan_field fields[1];
+    uint8_t gpio_config = 0;
 
     for(int i=0;i<3;++i){
         gpio_config |= (jgi->pin_dir_output[i] << i);
     }
+    gpio_config |= (1<<NR_GPIOS);
 
-    fields[0].num_bits = 3;         // FIXME: make programmable
+    fields[0].num_bits = NR_GPIOS+1;
     fields[0].out_value = &gpio_config;
-    fields[0].in_value = &gpio_config_prev;
+    fields[0].in_value = NULL;
 
     jtag_add_dr_scan(jgi->tap, 1, fields, TAP_IDLE);
 
@@ -184,27 +243,25 @@ static int jtag_gpio_set_config(struct jtag_gpio_info *jgi)
     return retval;
 }
 
+
 static int jtag_gpio_xfer_values(struct jtag_gpio_info *jgi)
 {
     int retval;
+
+    // Select DATA chain
+    jtag_gpio_select_data_chain_nr(jgi, 1);
+
     struct scan_field fields[1];
-
-    uint8_t ir_code = 4;            // GPIO_DATA
-
-    fields[0].num_bits = 4;
-    fields[0].out_value = &ir_code;
-    fields[0].in_value = NULL;
-
-    jtag_add_ir_scan(jgi->tap, fields, TAP_IDLE);
 
     uint8_t gpio_input_value = 0;
     uint8_t gpio_output_value = 0;
 
-    for(int i=0;i<3;++i){
+    for(int i=0;i<NR_GPIOS;++i){
         gpio_output_value |= (jgi->pin_output_val[i] << i);
     }
+    gpio_output_value |= (1<<NR_GPIOS);     // Set update flag
 
-    fields[0].num_bits = 3;         // FIXME: make programmable
+    fields[0].num_bits = NR_GPIOS+1;
     fields[0].out_value = &gpio_output_value;
     fields[0].in_value = &gpio_input_value;
 
@@ -214,7 +271,7 @@ static int jtag_gpio_xfer_values(struct jtag_gpio_info *jgi)
 	if (retval != ERROR_OK)
 		return retval;
 
-    for(int i=0;i<3;++i){
+    for(int i=0;i<NR_GPIOS;++i){
         jgi->pin_input_val[i] = (gpio_input_value >> i) & 1;
     }
 
