@@ -280,14 +280,12 @@ static int jtag_gpio_xfer_values(struct jtag_gpio_info *jgi)
 
 static int jtag_gpio_init(struct command_context *cmd_ctx, struct target *target)
 {
+	target->state = TARGET_RUNNING;
 	return ERROR_OK;
 }
 static int jtag_gpio_poll(struct target *target)
 {
     int retval;
-
-	if ((target->state == TARGET_RUNNING) || (target->state == TARGET_DEBUG_RUNNING))
-		target->state = TARGET_HALTED;
 
     struct jtag_gpio_info *jgi =target->arch_info;
     retval = jtag_gpio_xfer_values(jgi);
@@ -335,6 +333,20 @@ static int jtag_gpio_arch_state(struct target *target)
     return ERROR_OK;
 }
 
+static int jtag_gpio_resume(struct target *target, int current, target_addr_t address,
+			int handle_breakpoints, int debug_execution)
+{
+	target->state = TARGET_RUNNING;
+
+    return ERROR_OK;
+}
+
+static int jtag_gpio_step(struct target *target, int current, target_addr_t address,
+			int handle_breakpoints)
+{
+    return ERROR_OK;
+}
+
 struct target_type jtag_gpio_target = {
 	.name = "jtag_gpio",
 	.commands = jtag_gpio_command_handlers,
@@ -342,8 +354,12 @@ struct target_type jtag_gpio_target = {
     .target_create = &jtag_gpio_target_create,
 	.init_target = &jtag_gpio_init,
 	.poll = &jtag_gpio_poll,
-	.halt = &jtag_gpio_halt,
+
+    // These don't really do anything, but they prevent segfault when issuing CPU commands
+    .arch_state = &jtag_gpio_arch_state,
 	.assert_reset = &jtag_gpio_reset_assert,
 	.deassert_reset = &jtag_gpio_reset_deassert,
-    .arch_state = &jtag_gpio_arch_state
+	.halt = &jtag_gpio_halt,
+    .resume = &jtag_gpio_resume,
+    .step = &jtag_gpio_step
 };
