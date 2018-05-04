@@ -284,10 +284,16 @@ static int jtag_gpio_init(struct command_context *cmd_ctx, struct target *target
 }
 static int jtag_gpio_poll(struct target *target)
 {
+    int retval;
+
 	if ((target->state == TARGET_RUNNING) || (target->state == TARGET_DEBUG_RUNNING))
 		target->state = TARGET_HALTED;
 
-//    struct jtag_gpio_info *jgi = target->arch_info;
+    struct jtag_gpio_info *jgi =target->arch_info;
+    retval = jtag_gpio_xfer_values(jgi);
+
+    if (retval != ERROR_OK)
+        return retval;
 
 	return ERROR_OK;
 }
@@ -309,6 +315,9 @@ static int jtag_gpio_reset_deassert(struct target *target)
 
 static int jtag_gpio_arch_state(struct target *target)
 {
+    // Print the current state
+    // This gets called after the "poll" command on the command line
+    
     struct jtag_gpio_info *jgi = target->arch_info;
 
     uint32_t direction = 0;
