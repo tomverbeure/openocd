@@ -306,6 +306,26 @@ static int jtag_gpio_reset_deassert(struct target *target)
 	target->state = TARGET_RUNNING;
 	return ERROR_OK;
 }
+
+static int jtag_gpio_arch_state(struct target *target)
+{
+    struct jtag_gpio_info *jgi = target->arch_info;
+
+    uint32_t direction = 0;
+    uint32_t output = 0;
+    uint32_t input = 0;
+
+    for(int i=0;i<NR_GPIOS;++i){
+        direction |= (jgi->pin_dir_output[i] << i);
+        output    |= (jgi->pin_output_val[i] << i);
+        input     |= (jgi->pin_input_val[i] << i);
+    }
+
+    LOG_USER("direction: %02x, output: %02x, input: %02x", direction, output, input);
+
+    return ERROR_OK;
+}
+
 struct target_type jtag_gpio_target = {
 	.name = "jtag_gpio",
 	.commands = jtag_gpio_command_handlers,
@@ -316,4 +336,5 @@ struct target_type jtag_gpio_target = {
 	.halt = &jtag_gpio_halt,
 	.assert_reset = &jtag_gpio_reset_assert,
 	.deassert_reset = &jtag_gpio_reset_deassert,
+    .arch_state = &jtag_gpio_arch_state
 };
