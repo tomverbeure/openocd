@@ -112,7 +112,7 @@ COMMAND_HANDLER(handle_get_pin_command)
     if (retval != ERROR_OK)
         return retval;
 
-	command_print(CMD_CTX, "pin %d = %d", pin_nr, jgi->pin_input_val[pin_nr]);
+	command_print(CMD_CTX, "%d", jgi->pin_input_val[pin_nr]);
 
 	return ERROR_OK;
 }
